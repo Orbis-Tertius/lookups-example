@@ -38,9 +38,10 @@ use halo2_proofs::{
     circuit::{Chip, Layouter, SimpleFloorPlanner},
     dev::{MockProver, VerifyFailure},
     pasta::Fp,
-    plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Selector, TableColumn},
-    poly::Rotation,
+    plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Selector, TableColumn, keygen_vk},
+    poly::{Rotation, commitment::Params},
 };
+use pasta_curves::EqAffine;
 
 const XOR_BITS: usize = 2;
 
@@ -222,21 +223,22 @@ impl Circuit<Fp> for XorCircuit {
     type FloorPlanner = SimpleFloorPlanner;
 }
 
+
 fn main() {
     // The number of rows used in the constraint system matrix.
-    const N_ROWS_USED: u32 = 16;
+    let k = 5;
+    // let N_ROWS_USED: u32 = 16;
 
     // The row index for the public input.
-    const PUB_INPUT_ROW: usize = 0;
+    // const PUB_INPUT_ROW: usize = 0;
 
     // The verifier's public input.
     const PUB_INPUT: u64 = 3;
 
     // The actual number of rows in the constraint system is `2^k` where `N_ROWS_USED <= 2^k`.
-    let k = (N_ROWS_USED as f32).log2().ceil() as u32;
-    let n_rows = 1 << k;
-    let mut pub_inputs = vec![Fp::zero(); n_rows];
-    pub_inputs[PUB_INPUT_ROW] = Fp::from(PUB_INPUT);
+    // let k = (N_ROWS_USED as f32).log2().ceil() as u32;
+    // let n_rows = 1 << k;
+    let mut pub_inputs = vec![Fp::from(PUB_INPUT)];
 
     // Assert that the lookup passes because `xor(2, 1) == PUB_INPUT`.
     let circuit = XorCircuit {
@@ -244,6 +246,11 @@ fn main() {
         b: Some(Fp::from(1)),
         c: Some(Fp::from(PUB_INPUT)),
     };
+
+    let params: Params<EqAffine> = halo2_proofs::poly::commitment::Params::new(k);
+    let vk = dbg!(keygen_vk(&params, &circuit).unwrap());
+    let proof_path = "./proof";
+
     let prover = MockProver::run(k, &circuit, vec![pub_inputs.clone()]).unwrap();
     assert!(prover.verify().is_ok());
 
