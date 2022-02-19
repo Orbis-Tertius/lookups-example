@@ -34,11 +34,11 @@
 // does not range check any of `a`, `b`, or `c` to be 2-bits, i.e. there are no polynomial
 // constraints which explicity check `a, b, c ∈ {0, 1, 2, 3}`.
 
-use halo2::{
-    circuit::{layouter::SingleChipLayouter, Chip, Layouter},
+use halo2_proofs::{
+    circuit::{Chip, Layouter, SimpleFloorPlanner},
     dev::{MockProver, VerifyFailure},
     pasta::Fp,
-    plonk::{Advice, Assignment, Circuit, Column, ConstraintSystem, Error, Fixed, Selector},
+    plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Selector, TableColumn},
     poly::Rotation,
 };
 
@@ -53,9 +53,9 @@ struct XorChipConfig {
     l_col: Column<Advice>,
     r_col: Column<Advice>,
     o_col: Column<Advice>,
-    xor_l_col: Column<Fixed>,
-    xor_r_col: Column<Fixed>,
-    xor_o_col: Column<Fixed>,
+    xor_l_col: TableColumn,
+    xor_r_col: TableColumn,
+    xor_o_col: TableColumn,
     s_pub: Selector,
 }
 
@@ -84,28 +84,27 @@ impl XorChip {
         let pub_col = cs.instance_column();
         let s_pub = cs.selector();
 
+        cs.enable_equality(o_col);
+        cs.enable_equality(pub_col);
+
         cs.create_gate("public input", |cs| {
             let o = cs.query_advice(o_col, Rotation::cur());
             let pi = cs.query_instance(pub_col, Rotation::cur());
-            let s_pub = cs.query_selector(s_pub, Rotation::cur());
-            s_pub * (o - pi)
+            let s_pub = cs.query_selector(s_pub);
+            vec![s_pub * (o - pi)]
         });
 
-        let xor_l_col = cs.fixed_column();
-        let xor_r_col = cs.fixed_column();
-        let xor_o_col = cs.fixed_column();
+        let xor_l_col = cs.lookup_table_column();
+        let xor_r_col = cs.lookup_table_column();
+        let xor_o_col = cs.lookup_table_column();
 
-        let xor_lookup_query = [
-            cs.query_any(l_col.into(), Rotation::cur()),
-            cs.query_any(r_col.into(), Rotation::cur()),
-            cs.query_any(o_col.into(), Rotation::cur()),
-        ];
-        let xor_table_query = [
-            cs.query_any(xor_l_col.into(), Rotation::cur()),
-            cs.query_any(xor_r_col.into(), Rotation::cur()),
-            cs.query_any(xor_o_col.into(), Rotation::cur()),
-        ];
-        cs.lookup(&xor_lookup_query, &xor_table_query);
+        let _ = cs.lookup(|cs| {
+            vec![
+                (cs.query_advice(l_col, Rotation::cur()), xor_l_col),
+                (cs.query_advice(r_col, Rotation::cur()), xor_r_col),
+                (cs.query_advice(o_col, Rotation::cur()), xor_o_col),
+            ]
+        });
 
         XorChipConfig {
             l_col,
@@ -121,25 +120,25 @@ impl XorChip {
     // Allocates all legal input-output tuples for the XOR function in the first
     // `2^XOR_BITS * 2^XOR_BITS = 16` rows of the constraint system.
     fn alloc_table(&self, layouter: &mut impl Layouter<Fp>) -> Result<(), Error> {
-        layouter.assign_region(
+        layouter.assign_table(
             || "xor table",
-            |mut region| {
+            |mut table| {
                 let mut row_offset = 0;
                 for l in 0..1 << XOR_BITS {
                     for r in 0..1 << XOR_BITS {
-                        region.assign_fixed(
+                        table.assign_cell(
                             || format!("xor_l_col row {}", row_offset),
                             self.config.xor_l_col,
                             row_offset,
                             || Ok(Fp::from(l)),
                         )?;
-                        region.assign_fixed(
+                        table.assign_cell(
                             || format!("xor_r_col row {}", row_offset),
                             self.config.xor_r_col,
                             row_offset,
                             || Ok(Fp::from(r)),
                         )?;
-                        region.assign_fixed(
+                        table.assign_cell(
                             || format!("xor_o_col row {}", row_offset),
                             self.config.xor_o_col,
                             row_offset,
@@ -171,19 +170,19 @@ impl XorChip {
                     || "private input `a`",
                     self.config.l_col,
                     row_offset,
-                    || a.ok_or(Error::SynthesisError),
+                    || a.ok_or(Error::Synthesis),
                 )?;
                 region.assign_advice(
                     || "private input `b`",
                     self.config.r_col,
                     row_offset,
-                    || b.ok_or(Error::SynthesisError),
+                    || b.ok_or(Error::Synthesis),
                 )?;
                 region.assign_advice(
                     || "public input `c`",
                     self.config.o_col,
                     row_offset,
-                    || c.ok_or(Error::SynthesisError),
+                    || c.ok_or(Error::Synthesis),
                 )?;
                 Ok(())
             },
@@ -204,16 +203,23 @@ struct XorCircuit {
 impl Circuit<Fp> for XorCircuit {
     type Config = XorChipConfig;
 
+    fn without_witnesses(&self) -> Self {
+        todo!()
+    }
+
     fn configure(cs: &mut ConstraintSystem<Fp>) -> Self::Config {
         XorChip::configure(cs)
     }
-
-    fn synthesize(&self, cs: &mut impl Assignment<Fp>, config: Self::Config) -> Result<(), Error> {
-        let mut layouter = SingleChipLayouter::new(cs)?;
+    fn synthesize(
+        &self,
+        config: Self::Config,
+        mut layouter: impl Layouter<Fp>,
+    ) -> Result<(), Error> {
         let xor_chip = XorChip::new(config);
         xor_chip.alloc_table(&mut layouter)?;
         xor_chip.alloc_private_and_public_inputs(&mut layouter, self.a, self.b, self.c)
     }
+    type FloorPlanner = SimpleFloorPlanner;
 }
 
 fn main() {
@@ -251,9 +257,14 @@ fn main() {
     let prover = MockProver::run(k, &bad_circuit, vec![pub_inputs.clone()]).unwrap();
     match prover.verify() {
         Err(errors) => {
-            assert_eq!(errors.len(), 1, "expected one verification error, found: {:?}", errors);
+            assert_eq!(
+                errors.len(),
+                1,
+                "expected one verification error, found: {:?}",
+                errors
+            );
             match &errors[0] {
-                VerifyFailure::Gate { .. } => {}
+                VerifyFailure::ConstraintNotSatisfied { .. } => {}
                 e => panic!("expected 'public input' gate error, found: {:?}", e),
             };
         }
@@ -262,7 +273,7 @@ fn main() {
 
     // Assert that the lookup fails when `(a, b, c)` is not a row in the table; the lookup table is
     // for 2-bit XOR, using a 3-bit XOR input `a = 4` should result in a lookup failure.
-    let mut bad_circuit = circuit.clone();
+    let mut bad_circuit = circuit;
     bad_circuit.a = Some(Fp::from(4));
     let prover = MockProver::run(k, &bad_circuit, vec![pub_inputs]).unwrap();
     match prover.verify() {
