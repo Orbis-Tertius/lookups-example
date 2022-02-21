@@ -63,7 +63,7 @@
                    };
              in
              rustPkgs.workspaceShell {
-               nativeBuildInputs = with pkgs; [ rust-analyzer rustup cargo2nix ];
+               nativeBuildInputs = with pkgs; [ rust-analyzer rustup cargo2nix.defaultPackage.${system} ];
                shellHook =
                    ''
                    cp --no-preserve=mode ${rust-toolchain} rust-toolchain.toml

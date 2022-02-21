@@ -34,6 +34,8 @@
 // does not range check any of `a`, `b`, or `c` to be 2-bits, i.e. there are no polynomial
 // constraints which explicity check `a, b, c ∈ {0, 1, 2, 3}`.
 
+use std::io::Write;
+
 use halo2_proofs::{
     circuit::{Chip, Layouter, SimpleFloorPlanner},
     dev::{MockProver, VerifyFailure},
@@ -233,8 +235,9 @@ fn main() {
     const PUB_INPUT: u64 = 3;
 
     // The actual number of rows in the constraint system is `2^k` where `N_ROWS_USED <= 2^k`.
-    let k = (N_ROWS_USED as f32).log2().ceil() as u32;
-    let n_rows = 1 << k;
+    // let k = dbg!(N_ROWS_USED as f32).log2().ceil() as u32;
+    let k = 5;
+    let n_rows = dbg!(1 << k);
     let mut pub_inputs = vec![Fp::zero(); n_rows];
     pub_inputs[PUB_INPUT_ROW] = Fp::from(PUB_INPUT);
 
@@ -244,6 +247,23 @@ fn main() {
         b: Some(Fp::from(1)),
         c: Some(Fp::from(PUB_INPUT)),
     };
+
+    use plotters::prelude::*;
+    let root = BitMapBackend::new("layout.png", (1920, 1080)).into_drawing_area();
+    root.fill(&WHITE).unwrap();
+    let root = root
+        .titled("Example Circuit Layout", ("sans-serif", 60))
+        .unwrap();
+
+    halo2_proofs::dev::CircuitLayout::default()
+        // The first argument is the size parameter for the circuit.
+        .render(k, &circuit, &root)
+        .unwrap();
+
+    let dot_string = halo2_proofs::dev::circuit_dot_graph(&circuit);
+    let mut dot_graph = std::fs::File::create("circuit.dot").unwrap();
+    dot_graph.write_all(dot_string.as_bytes()).unwrap();
+
     let prover = MockProver::run(k, &circuit, vec![pub_inputs.clone()]).unwrap();
     assert!(prover.verify().is_ok());
 
