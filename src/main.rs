@@ -237,8 +237,7 @@ fn main() {
     // The actual number of rows in the constraint system is `2^k` where `N_ROWS_USED <= 2^k`.
     // let k = dbg!(N_ROWS_USED as f32).log2().ceil() as u32;
     let k = 5;
-    let n_rows = dbg!(1 << k);
-    let mut pub_inputs = vec![Fp::zero(); n_rows];
+    let mut pub_inputs = vec![Fp::zero()];
     pub_inputs[PUB_INPUT_ROW] = Fp::from(PUB_INPUT);
 
     // Assert that the lookup passes because `xor(2, 1) == PUB_INPUT`.
