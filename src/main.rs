@@ -288,3 +288,34 @@ fn main() {
         _ => panic!("expected `prover.verify()` to fail"),
     };
 }
+
+use proptest::prelude::*;
+proptest! {
+    #[test]
+    fn good_xor(a in 0..4u64, b in 0..4u64) {
+        let xored = a ^ b;
+        let circuit = XorCircuit {
+            a: Some(Fp::from(a)),
+            b: Some(Fp::from(b)),
+            c: Some(Fp::from(xored)),
+        };
+
+        let k = 5;
+        let prover = MockProver::run(k, &circuit, vec![vec![Fp::from(xored)]]).unwrap();
+        assert!(prover.verify().is_ok());
+    }
+
+    #[test]
+    fn good_and_bad(a in 0..4u64, b in 0..4u64, c in 0..4u64) {
+        let xored = a ^ b;
+        let circuit = XorCircuit {
+            a: Some(Fp::from(a)),
+            b: Some(Fp::from(b)),
+            c: Some(Fp::from(c)),
+        };
+
+        let k = 5;
+        let prover = MockProver::run(k, &circuit, vec![vec![Fp::from(xored)]]).unwrap();
+        assert_eq!(prover.verify().is_ok(), c == xored);
+    }
+}
