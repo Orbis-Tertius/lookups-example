@@ -5,31 +5,31 @@
 //
 // The constraint system matrix is:
 //
-// |-----||-------|-------|-------|-------|---------|-----------|-----------|-----------|
-// | row || l_col | r_col | o_col | s_pub | pub_col | xor_l_col | xor_r_col | xor_o_col |
-// |-----||-------|-------|-------|-------|---------|-----------|-----------|-----------|
-// |  0  ||   a   |   b   |   c   |   1   |   PI    |     00    |     00    |     00    |
-// |  1  ||       |       |       |   0   |         |     00    |     01    |     01    |
-// |  2  ||       |       |       |   0   |         |     00    |     10    |     10    |
-// |  3  ||       |       |       |   0   |         |     00    |     11    |     11    |
-// |  4  ||       |       |       |   0   |         |     01    |     00    |     01    |
-// |  5  ||       |       |       |   0   |         |     01    |     01    |     00    |
-// |  6  ||       |       |       |   0   |         |     01    |     10    |     11    |
-// |  7  ||       |       |       |   0   |         |     01    |     11    |     10    |
-// |  8  ||       |       |       |   0   |         |     10    |     00    |     10    |
-// |  9  ||       |       |       |   0   |         |     10    |     01    |     11    |
-// |  10 ||       |       |       |   0   |         |     10    |     10    |     00    |
-// |  11 ||       |       |       |   0   |         |     10    |     11    |     01    |
-// |  12 ||       |       |       |   0   |         |     11    |     00    |     11    |
-// |  13 ||       |       |       |   0   |         |     11    |     01    |     10    |
-// |  14 ||       |       |       |   0   |         |     11    |     10    |     01    |
-// |  15 ||       |       |       |   0   |         |     11    |     11    |     00    |
-// |-----||-------|-------|-------|-------|---------|-----------|-----------|-----------|
+// |-----||-------|-------|-------|---------|-----------|-----------|-----------|
+// | row || l_col | r_col | o_col | pub_col | xor_l_col | xor_r_col | xor_o_col |
+// |-----||-------|-------|-------|---------|-----------|-----------|-----------|
+// |  0  ||   a   |   b   |   c   |   PI    |     00    |     00    |     00    |
+// |  1  ||       |       |       |         |     00    |     01    |     01    |
+// |  2  ||       |       |       |         |     00    |     10    |     10    |
+// |  3  ||       |       |       |         |     00    |     11    |     11    |
+// |  4  ||       |       |       |         |     01    |     00    |     01    |
+// |  5  ||       |       |       |         |     01    |     01    |     00    |
+// |  6  ||       |       |       |         |     01    |     10    |     11    |
+// |  7  ||       |       |       |         |     01    |     11    |     10    |
+// |  8  ||       |       |       |         |     10    |     00    |     10    |
+// |  9  ||       |       |       |         |     10    |     01    |     11    |
+// |  10 ||       |       |       |         |     10    |     10    |     00    |
+// |  11 ||       |       |       |         |     10    |     11    |     01    |
+// |  12 ||       |       |       |         |     11    |     00    |     11    |
+// |  13 ||       |       |       |         |     11    |     01    |     10    |
+// |  14 ||       |       |       |         |     11    |     10    |     01    |
+// |  15 ||       |       |       |         |     11    |     11    |     00    |
+// |-----||-------|-------|-------|---------|-----------|-----------|-----------|
 //
 // where row 0 is used to allocate the prover's private inputs (`a` and `b`) and public input (`c`).
 // Row 0 is also used to allocate the verifier's public input (`PI`) where consistency between the
-// prover's and verifier's public inputs `c = PI` is checked using a public-input gate (`s_pub`
-// selector). Every legal input-output tuples for the 2-bit XOR function `xor(l, r) = o` is written
+// prover's and verifier's public inputs `c = PI` is checked using a public-input.
+// Every legal input-output tuples for the 2-bit XOR function `xor(l, r) = o` is written
 // into a row of the fixed columns `xor_r_col`, `xor_l_col`, and `xor_o_col`. Note that this circuit
 // does not range check any of `a`, `b`, or `c` to be 2-bits, i.e. there are no polynomial
 // constraints which explicity check `a, b, c ∈ {0, 1, 2, 3}`.
@@ -111,7 +111,6 @@ impl XorChip {
             xor_r_col,
             xor_o_col,
             pub_col,
-            // s_pub,
         }
     }
 
@@ -150,8 +149,8 @@ impl XorChip {
         )
     }
 
-    // Allocates `a`, `b`, and `c` and enables `s_pub` in row #0, i.e. the first available row where
-    // the `l_col`, `r_col`, and `o_col` cells have not been alloacted.
+    // Allocates `a`, `b`, and `c`.
+    // The `l_col`, `r_col`, and `o_col` cells have not been alloacted.
     fn alloc_private_and_public_inputs(
         &self,
         layouter: &mut impl Layouter<Fp>,
@@ -163,7 +162,6 @@ impl XorChip {
             || "private and public inputs",
             |mut region| {
                 let row_offset = 0;
-                // self.config.s_pub.enable(&mut region, row_offset)?;
                 region.assign_advice(
                     || "private input `a`",
                     self.config.l_col,
